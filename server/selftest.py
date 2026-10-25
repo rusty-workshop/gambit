@@ -9,7 +9,11 @@ def get(path, auth=True):
         with urllib.request.urlopen(urllib.request.Request(base + path, headers=h), timeout=60) as r:
             return r.status, json.loads(r.read())
     except urllib.error.HTTPError as e:
-        return e.code, json.loads(e.read() or b"{}")
+        raw = e.read()
+        try:
+            return e.code, json.loads(raw or b"{}")
+        except ValueError:  # a proxy in front (e.g. Funnel) answered with plain text
+            return e.code, {"raw": raw[:80].decode(errors="replace")}
 def check(name, cond, detail=""):
     global ok, fail
     ok, fail = (ok + 1, fail) if cond else (ok, fail + 1)
