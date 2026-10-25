@@ -1,0 +1,4 @@
+-keep class com.rusty.gambit.** extends android.app.Service
+-keep class com.rusty.gambit.** extends android.content.BroadcastReceiver
+-keep class com.rusty.gambit.** extends android.app.Activity
+-dontwarn javax.annotation.**

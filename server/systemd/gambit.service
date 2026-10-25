@@ -1,0 +1,13 @@
+[Unit]
+Description=gambit (Lichess correspondence bridge for the Gambit watch app)
+After=network-online.target
+
+[Service]
+EnvironmentFile=%h/lichess-watch/gambit.env
+Environment=PYTHONUNBUFFERED=1
+ExecStart=%h/lichess-watch/.venv/bin/python %h/lichess-watch/gambit.py
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=default.target

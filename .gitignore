@@ -1,0 +1,11 @@
+*.iml
+.gradle/
+build/
+local.properties
+gambit.properties
+secret.env
+server/gambit.env
+.idea/
+*.apk
+.kotlin/
+__pycache__/

@@ -1,0 +1,7 @@
+# Copy to gambit.properties (gitignored). Baked into BuildConfig at build time.
+# The watch never sees the Lichess token: it only talks to the gambit server.
+server.lan=http://192.168.1.158:8460
+# Optional Tailscale Funnel mount for away-from-home use, e.g. https://latitude.example.ts.net:8443/gambit
+server.funnel=
+# WATCH_KEY from server/gambit.env
+server.key=REPLACE_ME
