@@ -548,6 +548,7 @@ def summary() -> dict:
     """Everything the watch complications show, in one small request."""
     with _glock:
         mine = [g for g in _games.values() if g.get("isMyTurn")]
+        theirs = [g for g in _games.values() if not g.get("isMyTurn")]
     urgent = min(mine, key=lambda g: g.get("secondsLeft") or 10**9, default=None)
     me = li("GET", "/api/account")
     out = {
@@ -556,10 +557,15 @@ def summary() -> dict:
         "corr": me.get("perfs", {}).get("correspondence", {}).get("rating"),
         "corrProv": bool(me.get("perfs", {}).get("correspondence", {}).get("prov")),
         "puzzleSolved": None,
+        "waiting": None,  # a game where it's their move (shown when nothing is waiting on you)
     }
     if urgent:
         out["urgent"] = {"id": urgent["gameId"], "opponent": urgent["opponent"].get("username", "?"),
                          "secondsLeft": urgent.get("secondsLeft"), "daysPerTurn": days_per_turn(urgent["gameId"])}
+    elif theirs:
+        w = theirs[0]
+        out["waiting"] = {"id": w["gameId"], "opponent": w["opponent"].get("username", "?"),
+                          "daysPerTurn": days_per_turn(w["gameId"])}
     try:
         out["puzzleSolved"] = puzzle_solved_today()
     except Exception as e:
@@ -619,11 +625,14 @@ class H(BaseHTTPRequestHandler):
 
     def _send(self, code: int, obj):
         body = json.dumps(obj).encode()
-        self.send_response(code)
-        self.send_header("Content-Type", "application/json")
-        self.send_header("Content-Length", str(len(body)))
-        self.end_headers()
-        self.wfile.write(body)
+        try:
+            self.send_response(code)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+        except (BrokenPipeError, ConnectionResetError):
+            pass  # the watch dropped Wi-Fi mid-request; it will ask again
 
     def _send_png(self, body: bytes):
         self.send_response(200)

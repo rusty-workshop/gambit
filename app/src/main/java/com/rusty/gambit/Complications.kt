@@ -26,18 +26,34 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.JsonObject
 import java.time.Instant
 
-/** One /summary fetch shared by all five complications (they're usually asked to update together). */
+/**
+ * One /summary fetch shared by all five complications (they're usually asked to update together).
+ * The last good answer is kept on disk, so a watch that has dropped Wi-Fi (or a freshly started
+ * process) shows the last known state instead of going blank. "fetchedAt" lets countdowns stay right.
+ */
 object Summary {
     private val lock = Mutex()
     private var cached: JsonObject? = null
     private var at = 0L
 
-    suspend fun get(): JsonObject? = lock.withLock {
+    suspend fun get(ctx: Context): JsonObject? = lock.withLock {
         if (cached == null || System.currentTimeMillis() - at > 15_000) {
-            runCatching { Api.get("/summary", readMs = 10_000) }.onSuccess { cached = it; at = System.currentTimeMillis() }
+            runCatching { Api.get("/summary", readMs = 10_000) }
+                .onSuccess {
+                    val now = System.currentTimeMillis()
+                    cached = JsonObject(it + ("fetchedAt" to kotlinx.serialization.json.JsonPrimitive(now))); at = now
+                    prefs(ctx).edit().putString("summary", cached.toString()).apply()
+                }
+                .onFailure {
+                    if (cached == null) cached = prefs(ctx).getString("summary", null)?.let { saved ->
+                        runCatching { kotlinx.serialization.json.Json.parseToJsonElement(saved) as JsonObject }.getOrNull()
+                    }
+                }
         }
         cached
     }
+
+    private fun prefs(ctx: Context) = ctx.getSharedPreferences("gambit", Context.MODE_PRIVATE)
 
     /** Ask every Gambit complication on the watch face to refresh (after an event, a move, a puzzle). */
     fun refresh(ctx: Context) {
@@ -68,9 +84,11 @@ private fun countdown(to: Instant, template: String? = null): ComplicationText =
 private class Urgent(val id: String, val opponent: String, val deadline: Instant?, val secondsLeft: Int?, val allowance: Int?)
 
 private fun JsonObject.urgent(): Urgent? = obj("urgent")?.let {
-    val left = it.int("secondsLeft")
-    Urgent(it.str("id")!!, it.str("opponent") ?: "?", left?.let { s -> Instant.now().plusSeconds(s.toLong()) }, left,
-        it.int("daysPerTurn")?.times(86_400))
+    // secondsLeft was true at fetchedAt; the summary may be a saved one from a while ago.
+    val fetchedAt = long("fetchedAt") ?: System.currentTimeMillis()
+    val deadline = it.int("secondsLeft")?.let { s -> Instant.ofEpochMilli(fetchedAt).plusSeconds(s.toLong()) }
+    val left = deadline?.let { d -> maxOf(0L, d.epochSecond - Instant.now().epochSecond).toInt() }
+    Urgent(it.str("id")!!, it.str("opponent") ?: "?", deadline, left, it.int("daysPerTurn")?.times(86_400))
 }
 
 abstract class GambitComplication : SuspendingComplicationDataSourceService() {
@@ -85,10 +103,23 @@ abstract class GambitComplication : SuspendingComplicationDataSourceService() {
     override fun getPreviewData(type: ComplicationType): ComplicationData? = preview(type)
 
     override suspend fun onComplicationRequest(request: ComplicationRequest): ComplicationData {
-        val s = Summary.get()
-            ?: return ShortTextComplicationData.Builder(text("--"), text("Latitude unreachable"))
-                .setMonochromaticImage(knight).setTapAction(openApp(this, "home")).build()
+        val s = Summary.get(this) ?: return unreachable(request.complicationType)
         return build(request.complicationType, s)
+    }
+
+    /** Never seen the server (and nothing saved): "--" in whatever shape the slot asked for. */
+    private fun unreachable(type: ComplicationType): ComplicationData {
+        val tap = openApp(this, "home")
+        return when (type) {
+            ComplicationType.RANGED_VALUE -> RangedValueComplicationData.Builder(0f, 0f, 1f, text("Latitude unreachable"))
+                .setText(text("--")).setMonochromaticImage(knight).setTapAction(tap).build()
+            ComplicationType.LONG_TEXT -> LongTextComplicationData.Builder(text("Latitude unreachable"), text("Latitude unreachable"))
+                .setMonochromaticImage(knight).setTapAction(tap).build()
+            ComplicationType.MONOCHROMATIC_IMAGE -> MonochromaticImageComplicationData.Builder(knight, text("Latitude unreachable"))
+                .setTapAction(tap).build()
+            else -> ShortTextComplicationData.Builder(text("--"), text("Latitude unreachable"))
+                .setMonochromaticImage(knight).setTapAction(tap).build()
+        }
     }
 
     protected fun short(t: ComplicationText, desc: String, route: String, image: MonochromaticImage? = knight, title: String? = null) =
@@ -140,7 +171,7 @@ class UrgentGameComplication : GambitComplication() {
 class ClockComplication : GambitComplication() {
     override fun build(type: ComplicationType, s: JsonObject): ComplicationData {
         val u = s.urgent()
-        if (u?.deadline == null || u.secondsLeft == null) return NoDataComplicationData()
+        if (u?.deadline == null || u.secondsLeft == null) return idle(type, s)
         val route = "game/${u.id}"
         val allowance = (u.allowance ?: u.secondsLeft).coerceAtLeast(u.secondsLeft).coerceAtLeast(1)
         return when (type) {
@@ -148,6 +179,22 @@ class ClockComplication : GambitComplication() {
                 u.secondsLeft.toFloat(), 0f, allowance.toFloat(), text("Time left against ${u.opponent}"),
             ).setText(countdown(u.deadline)).setMonochromaticImage(knight).setTapAction(openApp(this, route)).build()
             else -> short(countdown(u.deadline), "Time left against ${u.opponent}", route)
+        }
+    }
+
+    /**
+     * Nothing waiting on you. In correspondence your clock refills on every move, so while it's their
+     * move the ring shows full ("Wait"); with no games at all it's an empty "–".
+     */
+    private fun idle(type: ComplicationType, s: JsonObject): ComplicationData {
+        val w = s.obj("waiting")
+        val label = if (w != null) "Wait" else "–"
+        val desc = if (w != null) "Their move against ${w.str("opponent")}" else "No correspondence games"
+        val route = w?.str("id")?.let { "game/$it" } ?: "home"
+        return when (type) {
+            ComplicationType.RANGED_VALUE -> RangedValueComplicationData.Builder(if (w != null) 1f else 0f, 0f, 1f, text(desc))
+                .setText(text(label)).setMonochromaticImage(knight).setTapAction(openApp(this, route)).build()
+            else -> short(text(label), desc, route)
         }
     }
 
