@@ -197,7 +197,7 @@ fun GameScreen(nav: NavHostController, id: String) {
                             pending = null; selected = null; sending = true; error = null
                             scope.launch {
                                 runCatching { Api.post("/game/$id/move", "uci" to uci) }
-                                    .onSuccess { override = it; haptics.performHapticFeedback(HapticFeedbackType.LongPress) }
+                                    .onSuccess { override = it; haptics.performHapticFeedback(HapticFeedbackType.LongPress); Summary.refresh(ctx) }
                                     .onFailure { error = it.message }
                                 sending = false
                             }

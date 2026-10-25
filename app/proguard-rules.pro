@@ -2,3 +2,4 @@
 -keep class com.rusty.gambit.** extends android.content.BroadcastReceiver
 -keep class com.rusty.gambit.** extends android.app.Activity
 -dontwarn javax.annotation.**
+-keep class * extends androidx.wear.watchface.complications.datasource.ComplicationDataSourceService

@@ -20,6 +20,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -188,6 +189,7 @@ private fun PuzzleBoard(p: JsonObject) {
     var solved by remember { mutableStateOf(false) }
     var hintArrow by remember { mutableStateOf<Arrow?>(null) }
     val scope = rememberCoroutineScope()
+    val ctx = LocalContext.current
     val step = steps[idx.coerceAtMost(steps.lastIndex)]
     val legal = remember(idx) { step.legalMap() }
     val targets = selected?.let { s -> legal[s]?.map { it.take(2) }?.toSet() } ?: emptySet()
@@ -196,7 +198,7 @@ private fun PuzzleBoard(p: JsonObject) {
     fun report(win: Boolean) {
         if (reported) return
         reported = true
-        scope.launch { runCatching { Api.post("/puzzle/${p.str("id")}/result", "win" to win) } }
+        scope.launch { runCatching { Api.post("/puzzle/${p.str("id")}/result", "win" to win) }.onSuccess { Summary.refresh(ctx) } }
     }
 
     fun play(uci: String) {

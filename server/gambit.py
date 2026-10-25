@@ -487,6 +487,52 @@ def home() -> dict:
     }
 
 
+_days_per_turn: dict[str, int | None] = {}
+_daily = {"id": None, "at": 0}
+
+
+def days_per_turn(gid: str) -> int | None:
+    if gid not in _days_per_turn:
+        try:
+            _days_per_turn[gid] = li_first_line(f"/api/board/game/stream/{gid}").get("daysPerTurn")
+        except Exception:
+            return None
+    return _days_per_turn[gid]
+
+
+def puzzle_solved_today() -> bool:
+    if time.time() - _daily["at"] > 1800:  # the daily puzzle changes at midnight UTC
+        _daily["id"] = li("GET", "/api/puzzle/daily", auth=False)["puzzle"]["id"]
+        _daily["at"] = time.time()
+    for a in li("GET", "/api/puzzle/activity?max=30", accept="application/x-ndjson"):
+        if (a.get("puzzle") or {}).get("id", a.get("id")) == _daily["id"]:
+            return True
+    return False
+
+
+def summary() -> dict:
+    """Everything the watch complications show, in one small request."""
+    with _glock:
+        mine = [g for g in _games.values() if g.get("isMyTurn")]
+    urgent = min(mine, key=lambda g: g.get("secondsLeft") or 10**9, default=None)
+    me = li("GET", "/api/account")
+    out = {
+        "myTurn": len(mine),
+        "urgent": None,
+        "corr": me.get("perfs", {}).get("correspondence", {}).get("rating"),
+        "corrProv": bool(me.get("perfs", {}).get("correspondence", {}).get("prov")),
+        "puzzleSolved": None,
+    }
+    if urgent:
+        out["urgent"] = {"id": urgent["gameId"], "opponent": urgent["opponent"].get("username", "?"),
+                         "secondsLeft": urgent.get("secondsLeft"), "daysPerTurn": days_per_turn(urgent["gameId"])}
+    try:
+        out["puzzleSolved"] = puzzle_solved_today()
+    except Exception as e:
+        log("puzzle activity failed:", e)
+    return out
+
+
 def friends() -> list[dict]:
     rel = li("GET", "/api/rel/following", accept="application/x-ndjson")
     ids = [u["id"] for u in rel][:100]
@@ -610,6 +656,8 @@ class H(BaseHTTPRequestHandler):
                 return events_since(after, wait)
             if p == ["home"]:
                 return home()
+            if p == ["summary"]:
+                return summary()
             if len(p) == 2 and p[0] == "game":
                 return game_detail(need_id(p[1]))
             if len(p) == 3 and p[0] == "game" and p[2] == "chat":

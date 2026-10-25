@@ -1,3 +1,8 @@
 <resources>
     <string name="app_name">Gambit</string>
+    <string name="c_your_move">Gambit: your move</string>
+    <string name="c_urgent">Gambit: most urgent game</string>
+    <string name="c_clock">Gambit: clock ring</string>
+    <string name="c_puzzle">Gambit: daily puzzle</string>
+    <string name="c_rating">Gambit: rating</string>
 </resources>

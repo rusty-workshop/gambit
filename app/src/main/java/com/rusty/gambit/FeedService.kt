@@ -75,7 +75,7 @@ class FeedService : Service() {
                     val latest = o.int("latest") ?: after
                     val items = o.arr("items")
                     if (after >= 0 && !o.bool("reset")) items.forEach { show(it) }
-                    if (items.isNotEmpty()) Feed.tick.value++
+                    if (items.isNotEmpty()) { Feed.tick.value++; Summary.refresh(this@FeedService) }
                     after = latest
                 }
                 .onFailure {

@@ -21,6 +21,7 @@ Two parts:
 - Challenges: accept/decline/cancel, challenge a friend, or post an open seek (1–14 days per move)
 - Friends you follow with online status; profile with follow/unfollow, DM (send-only: the API can't read the inbox), private notes
 - Daily puzzle, with the result recorded on your Lichess puzzle rating
+- Five complications: your-move count, most urgent game (opponent + live countdown), clock ring, daily puzzle (✓ once solved), correspondence rating. They refresh as soon as something happens, plus a slow periodic refresh
 - **Stockfish review of finished games** on the Latitude: accuracy, inaccuracies/mistakes/blunders, and each mistake on a board with the played (red) and best (green) moves. The server refuses to analyse games still in progress.
 
 ## Server (Latitude)
