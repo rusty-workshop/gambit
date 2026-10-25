@@ -24,6 +24,13 @@ c, b = get("/home"); check("home", c == 200 and "games" in b and "me" in b, b); 
 c, b = get("/events?after=-1&wait=1"); check("events sync", c == 200 and "latest" in b, b)
 t = time.time(); c, b2 = get(f"/events?after={b.get('latest', 0)}&wait=2"); check("events long-poll waits", c == 200 and time.time() - t >= 1.8, b2)
 c, b = get("/summary"); check("summary", c == 200 and "myTurn" in b and "corr" in b, b); print("   ", b)
+c, b = get("/piecesets"); check("piece sets", c == 200 and "kiwen-suwi" in b.get("sets", []), b)
+try:
+    with urllib.request.urlopen(urllib.request.Request(base + "/pieces/kiwen-suwi/wN?size=64", headers={"Authorization": f"Bearer {key}"}), timeout=60) as r:
+        check("piece png", r.status == 200 and r.read(8) == b"\x89PNG\r\n\x1a\n")
+except Exception as e:
+    check("piece png", False, e)
+c, b = get("/pieces/../wN"); check("bad piece set rejected", c in (400, 404), (c, b))
 c, b = get("/friends"); check("friends", c == 200 and "friends" in b, b)
 c, b = get("/puzzle/daily"); check("daily puzzle", c == 200 and b.get("steps") and b["steps"][0]["expect"][2:] in b["steps"][0]["legal"].get(b["steps"][0]["expect"][:2], []), b)
 c, b = get("/finished"); check("finished games", c == 200 and "games" in b, b)

@@ -14,6 +14,7 @@ Two parts:
 ## Features
 
 - Correspondence games list (your move first, time left), board in your Lichess theme
+- Any Lichess piece set (picker on the watch, defaults to your Lichess preference). cburnett is built in; other sets are rendered to PNGs on the server with cairosvg (`pip install cairosvg`) and cached on the watch
 - Notifications: opponent moved, new game started, game over, challenge received/declined
 - Moving: taps snap to the nearest movable piece or legal square; the bezel zooms, drag pans; every move is confirmed
 - Promotion picker, offer/accept/decline draw, resign (confirmed), move list

@@ -445,19 +445,52 @@ def daily_puzzle() -> dict:
             "lastMove": None, "start": start, "steps": steps}
 
 
-# ------------------------------------------------------------------ preferences
+# ------------------------------------------------------------------ preferences & piece sets
 
-_prefs = {"theme": "brown", "at": 0}
+_prefs = {"theme": "brown", "pieceSet": "cburnett", "at": 0}
+
+PIECE_SETS = (
+    "cburnett merida alpha pirouetti chessnut chess7 reillycraig companion riohacha kosal leipzig fantasy "
+    "spatial celtic california caliente pixel firi rhosgfx maestro fresca cardinal gioco tatiana staunty cooke "
+    "governor dubrovny shahi-ivory-brown icpieces mpchess kiwen-suwi horsey anarcandy xkcd letter disguised shapes"
+).split()
+PIECE_RE = re.compile(r"^[wb][KQRBNP]$")
+_render_lock = threading.Lock()
 
 
-def board_theme() -> str:
+def lichess_prefs() -> dict:
     if time.time() - _prefs["at"] > 3600:
         try:
-            _prefs["theme"] = li("GET", "/api/account/preferences")["prefs"].get("theme", "brown")
+            pr = li("GET", "/api/account/preferences")["prefs"]
+            _prefs["theme"] = pr.get("theme", "brown")
+            _prefs["pieceSet"] = pr.get("pieceSet", "cburnett")
         except Exception:
             pass
         _prefs["at"] = time.time()
-    return _prefs["theme"]
+    return _prefs
+
+
+def board_theme() -> str:
+    return lichess_prefs()["theme"]
+
+
+def piece_png(piece_set: str, code: str, size: int) -> bytes:
+    """Lichess's SVG for one piece, rendered to a PNG for the watch (Android has no SVG renderer). Cached on disk."""
+    if piece_set not in PIECE_SETS or not PIECE_RE.match(code):
+        raise ValueError("unknown piece set or piece")
+    size = max(32, min(192, size))
+    path = DATA / "pieces" / piece_set / f"{code}_{size}.png"
+    if path.exists():
+        return path.read_bytes()
+    import cairosvg  # only needed for non-cached pieces
+    with _render_lock:
+        req = urllib.request.Request(f"https://lichess1.org/assets/piece/{piece_set}/{code}.svg", headers={"User-Agent": UA})
+        with urllib.request.urlopen(req, timeout=15) as r:
+            svg = r.read()
+        png = cairosvg.svg2png(bytestring=svg, output_width=size, output_height=size)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(png)
+    return png
 
 
 # ------------------------------------------------------------------ HTTP API for the watch
@@ -484,6 +517,7 @@ def home() -> dict:
         "challengesIn": [c(x, "challenger") for x in ch.get("in", []) if x.get("speed") == "correspondence"],
         "challengesOut": [c(x, "destUser") for x in ch.get("out", []) if x.get("speed") == "correspondence"],
         "theme": board_theme(),
+        "pieceSet": lichess_prefs()["pieceSet"],
     }
 
 
@@ -591,6 +625,14 @@ class H(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _send_png(self, body: bytes):
+        self.send_response(200)
+        self.send_header("Content-Type", "image/png")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "max-age=31536000")
+        self.end_headers()
+        self.wfile.write(body)
+
     def _authed(self) -> bool:
         given = self.headers.get("Authorization", "").removeprefix("Bearer ").strip()
         if hmac.compare_digest(given.encode(), WATCH_KEY.encode()):
@@ -615,6 +657,8 @@ class H(BaseHTTPRequestHandler):
         if not self._authed():
             return
         try:
+            if method == "GET" and len(parts) == 3 and parts[0] == "pieces":
+                return self._send_png(piece_png(parts[1], parts[2], int(q.get("size", ["128"])[0])))
             out = self._dispatch(method, parts, q)
             if out is None:
                 return self._send(404, {"error": "not found"})
@@ -658,6 +702,8 @@ class H(BaseHTTPRequestHandler):
                 return home()
             if p == ["summary"]:
                 return summary()
+            if p == ["piecesets"]:
+                return {"sets": PIECE_SETS, "lichess": lichess_prefs()["pieceSet"]}
             if len(p) == 2 and p[0] == "game":
                 return game_detail(need_id(p[1]))
             if len(p) == 3 and p[0] == "game" and p[2] == "chat":

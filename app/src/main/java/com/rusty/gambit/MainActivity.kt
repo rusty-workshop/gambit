@@ -76,6 +76,7 @@ fun App(route: String?, consumed: () -> Unit) {
         if (route != null) consumed()
     }
     MaterialTheme {
+        PieceSetLoader()
         SwipeDismissableNavHost(nav, startDestination = "home") {
             composable("home") { HomeScreen(nav) }
             composable("game/{id}") { GameScreen(nav, it.arguments?.getString("id")!!) }
@@ -90,6 +91,7 @@ fun App(route: String?, consumed: () -> Unit) {
             composable("message/{user}") { MessageScreen(nav, it.arguments?.getString("user")!!) }
             composable("note/{user}") { NoteScreen(nav, it.arguments?.getString("user")!!) }
             composable("puzzle") { PuzzleScreen() }
+            composable("pieces") { PieceSetScreen(nav) }
             composable("finished") { FinishedScreen(nav) }
             composable("review/{id}") { ReviewScreen(nav, it.arguments?.getString("id")!!) }
             composable("moment/{id}/{index}") {

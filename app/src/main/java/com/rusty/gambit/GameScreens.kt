@@ -51,7 +51,7 @@ fun HomeScreen(nav: NavHostController) {
     val home = load("home", live = true) { Api.get("/home") }
     val scope = rememberCoroutineScope()
     Loaded(home) { h ->
-        LaunchedEffect(h) { BoardTheme.name = h.str("theme") }
+        LaunchedEffect(h) { BoardTheme.name = h.str("theme"); PieceSet.lichess = h.str("pieceSet") }
         val games = h.arr("games")
         val incoming = h.arr("challengesIn")
         val outgoing = h.arr("challengesOut")
@@ -86,6 +86,7 @@ fun HomeScreen(nav: NavHostController) {
             chip("Daily puzzle", h.obj("me")?.int("puzzle")?.let { "Puzzle rating $it" }) { nav.go("puzzle") }
             chip("Friends") { nav.go("friends") }
             chip("Finished games", "Stockfish review") { nav.go("finished") }
+            chip("Piece set", PieceSet.current) { nav.go("pieces") }
         }
     }
 }

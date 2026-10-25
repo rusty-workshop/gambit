@@ -34,6 +34,10 @@ import androidx.compose.ui.graphics.vector.PathParser
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.rotary.onRotaryScrollEvent
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.graphics.FilterQuality
+import kotlin.math.roundToInt
 import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.hypot
@@ -179,9 +183,14 @@ fun ChessBoard(
             }
             selected?.let { tint(it, Color(0x8814551E)) }
             check?.let { tint(it, Color(0xAAE53935)) }
+            val imgs = if (PieceSet.loadedSet == PieceSet.current && PieceSet.current != "cburnett") PieceSet.images else null
             for ((s, code) in pieces) {
                 val (c, r) = cell(s, flipped)
-                drawPiece(code, Offset(c * sq, r * sq), sq)
+                val img = imgs?.get(code)
+                if (img != null) drawImage(
+                    img, dstOffset = IntOffset((c * sq).roundToInt(), (r * sq).roundToInt()),
+                    dstSize = IntSize(sq.roundToInt(), sq.roundToInt()), filterQuality = FilterQuality.Medium,
+                ) else drawPiece(code, Offset(c * sq, r * sq), sq)
             }
             for (t in targets) {
                 val (c, r) = cell(t, flipped)

@@ -66,6 +66,26 @@ object Api {
         }
 
     suspend fun get(path: String, readMs: Int = 20_000) = request("GET", path, readMs = readMs)
+
+    /** Raw bytes (piece images). */
+    suspend fun bytes(path: String): ByteArray = withContext(Dispatchers.IO) {
+        var last: Exception = ApiException("server not configured")
+        for ((base, connectMs) in bases) {
+            val conn = URL(base + path).openConnection() as HttpURLConnection
+            try {
+                conn.connectTimeout = connectMs; conn.readTimeout = 20_000
+                conn.setRequestProperty("Authorization", "Bearer ${BuildConfig.SERVER_KEY}")
+                if (conn.responseCode == 200) return@withContext conn.inputStream.use { it.readBytes() }
+                last = ApiException("HTTP ${conn.responseCode}")
+                if (conn.responseCode < 500) break
+            } catch (e: Exception) {
+                last = e
+            } finally {
+                conn.disconnect()
+            }
+        }
+        throw last
+    }
     suspend fun post(path: String, vararg fields: Pair<String, Any?>) = request("POST", path, obj(*fields))
 }
 
